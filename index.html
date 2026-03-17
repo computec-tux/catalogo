@@ -61,11 +61,7 @@
                     <p class="text-blue-500 font-bold text-[10px] uppercase tracking-widest mb-2">Detalle del Producto</p>
                     <h2 id="txt-zoom" class="text-xl md:text-2xl font-black text-gray-800 leading-tight mb-4"></h2>
                     <div class="h-1 w-12 bg-blue-500 mb-6"></div>
-                    <p class="text-gray-600 text-sm leading-relaxed mb-6">
-                        Este producto ha sido seleccionado cuidadosamente bajo los estándares de calidad de <strong>Computec</strong>. 
-                        Garantizamos originalidad y un estado impecable para tu total satisfacción.
-                        Si tienes alguna duda específica sobre el artículo, no dudes en contactarnos antes de realizar tu pedido.
-                    </p>
+                    <p id="desc-zoom" class="text-gray-600 text-sm leading-relaxed mb-6"></p>
                     <p class="text-green-600 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                         <span>📸</span> Foto Real del Producto
                     </p>
@@ -140,7 +136,9 @@
                             imgBlanca: columnas[2]?.trim().replace(/\"/g, "") || "", 
                             imgReal: columnas[3]?.trim().replace(/\"/g, "") || "",   
                             estado: columnas[4]?.trim().replace(/\"/g, "").toLowerCase() || "",
-                            descuento: dNum
+                            descuento: dNum,
+                            // Nueva propiedad: Descripción desde la Columna G (índice 6)
+                            descripcion: columnas[6]?.trim().replace(/\"/g, "") || "Garantizamos originalidad y un estado impecable para tu total satisfacción."
                         };
                     }
                     return null;
@@ -182,7 +180,7 @@
                     <div class="card-container bg-white rounded-3xl shadow-sm p-3 flex flex-col border border-gray-50 relative">
                         ${badgeDescuento}
                         <div class="relative w-full aspect-square bg-white overflow-hidden rounded-2xl mb-3 cursor-pointer" 
-                             onclick="abrirZoom('${rutaReal}', '${p.nombre}')">
+                             onclick="abrirZoom('${rutaReal}', '${p.nombre}', '${p.descripcion.replace(/'/g, "\\'")}')">
                             <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'"
                                  class="img-card absolute inset-0 w-full h-full object-contain p-2">
                         </div>
@@ -219,10 +217,10 @@
             }
         }
 
-        function abrirZoom(url, nombre) {
+        function abrirZoom(url, nombre, descripcion) {
             document.getElementById('img-zoom').src = url;
             document.getElementById('txt-zoom').innerText = nombre;
-            // Aseguramos que el scroll esté arriba al abrir
+            document.getElementById('desc-zoom').innerText = descripcion;
             document.getElementById('scroll-area-detalles').scrollTop = 0;
             document.getElementById('modal-zoom').classList.add('active');
             document.body.classList.add('modal-open');
