@@ -37,11 +37,10 @@
         .opcion-orden:last-child { border-bottom: none; }
         .opcion-orden:active { background-color: #f3f4f6; }
 
-        /* Mejora para el área de texto con scroll en móviles */
         @media (max-width: 767px) {
             #scroll-area-detalles {
-                max-height: 250px; /* Altura máxima del texto antes del scroll */
-                overflow-y: auto;  /* Permite scroll vertical */
+                max-height: 250px;
+                overflow-y: auto;
             }
         }
     </style>
@@ -49,7 +48,7 @@
 <body class="bg-gray-100 min-h-screen pb-10 font-sans">
 
     <div id="modal-zoom" class="fixed inset-0 bg-black/95 z-50 flex flex-col md:flex-row items-center justify-center p-4" onclick="cerrarZoom()">
-        <div class="absolute top-4 right-4 text-white text-sm font-bold bg-white/10 px-4 py-2 rounded-full border border-white/20 z-50">CERRAR</div>
+        <div class="absolute top-4 right-4 text-white text-sm font-bold bg-white/10 px-4 py-2 rounded-full border border-white/20 z-50 cursor-pointer">CERRAR</div>
         
         <div class="flex flex-col md:flex-row bg-white rounded-3xl overflow-hidden max-w-4xl w-full max-h-[90vh] shadow-2xl" onclick="event.stopPropagation()">
             <div class="md:w-3/5 bg-white flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-100">
@@ -89,7 +88,6 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                
                 <div id="menu-ordenar">
                     <div class="opcion-orden" onclick="ordenarProductos('defecto')">Todos</div>
                     <div class="opcion-orden" onclick="ordenarProductos('menor')">Precio: Menor a Mayor</div>
@@ -114,40 +112,42 @@
         let productosData = [];
         let productosFiltrados = [];
 
+        // Función para limpiar comillas y limpiar texto
+        const limpiar = (t) => t?.replace(/^"|"$/g, '').trim() || "";
+
         async function cargarCatalogo() {
             try {
                 const respuesta = await fetch(urlCSV + "&v=" + Date.now());
                 const texto = await respuesta.text();
+                
+                // Expresión regular para separar por comas respetando el contenido entre comillas
                 const filas = texto.split(/\r?\n/).slice(1);
                 
                 productosData = filas.map(fila => {
-                    const columnas = fila.split(/,(?=(?:(?:[^\" ]*\"){2})*[^\" ]*$)/);
+                    const columnas = fila.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || fila.split(',');
+                    
                     if (columnas.length >= 5) {
-                        const precioOriginal = columnas[1]?.trim().replace(/\"/g, "") || "0";
-                        const descuentoStr = columnas[5]?.trim().replace(/\"/g, "").replace("%", "") || "0";
-                        const pNum = parseFloat(precioOriginal.replace(/[^0-9.]/g, '')) || 0;
+                        const nombre = limpiar(columnas[0]);
+                        const precioTxt = limpiar(columnas[1]);
+                        const imgBlanca = limpiar(columnas[2]);
+                        const imgReal = limpiar(columnas[3]);
+                        const estado = limpiar(columnas[4]).toLowerCase();
+                        const descuentoStr = columnas[5] ? limpiar(columnas[5]).replace("%", "") : "0";
+                        const descripcion = columnas[6] ? limpiar(columnas[6]) : "Garantizamos originalidad y un estado impecable.";
+
+                        const pNum = parseFloat(precioTxt.replace(/[^0-9.]/g, '')) || 0;
                         const dNum = parseFloat(descuentoStr) || 0;
                         const precioFinalNum = dNum > 0 ? pNum - (pNum * (dNum / 100)) : pNum;
 
-                        return {
-                            nombre: columnas[0]?.trim().replace(/\"/g, "") || "",
-                            precioTxt: precioOriginal,
-                            precioFinal: precioFinalNum,
-                            imgBlanca: columnas[2]?.trim().replace(/\"/g, "") || "", 
-                            imgReal: columnas[3]?.trim().replace(/\"/g, "") || "",   
-                            estado: columnas[4]?.trim().replace(/\"/g, "").toLowerCase() || "",
-                            descuento: dNum,
-                            // Nueva propiedad: Descripción desde la Columna G (índice 6)
-                            descripcion: columnas[6]?.trim().replace(/\"/g, "") || "Garantizamos originalidad y un estado impecable para tu total satisfacción."
-                        };
+                        return { nombre, precioTxt, precioFinal: precioFinalNum, imgBlanca, imgReal, estado, descuento: dNum, descripcion };
                     }
                     return null;
-                }).filter(p => p && (p.estado === "disponible" || p.estado === "d"));
+                }).filter(p => p && (p.estado.includes("disponible") || p.estado === "d"));
                 
                 productosFiltrados = [...productosData];
                 mostrarProductos(productosFiltrados);
             } catch (error) { 
-                document.getElementById('contenedor-productos').innerHTML = "<p class='text-center col-span-2'>Error al cargar.</p>";
+                document.getElementById('contenedor-productos').innerHTML = "<p class='text-center col-span-2'>Error al cargar datos.</p>";
             }
         }
 
@@ -157,71 +157,46 @@
 
             lista.forEach(p => {
                 const cache = "?v=" + Date.now();
-                const rutaBlanca = "./" + p.imgBlanca + cache;
-                const rutaReal = "./" + p.imgReal + cache;
-                let HTMLPrecio = "";
-                let badgeDescuento = "";
+                const rutaBlanca = p.imgBlanca.startsWith('http') ? p.imgBlanca : "./" + p.imgBlanca + cache;
+                const rutaReal = p.imgReal.startsWith('http') ? p.imgReal : "./" + p.imgReal + cache;
                 const precioMostrado = `$${p.precioFinal.toFixed(2)}`;
+                
+                let HTMLPrecio = p.descuento > 0 ? 
+                    `<div class="flex flex-col mb-3"><span class="text-gray-400 line-through text-[10px] font-bold">${p.precioTxt}</span><span class="text-red-600 font-black text-xl leading-tight">${precioMostrado}</span></div>` : 
+                    `<p class="text-blue-600 font-black text-lg mb-3">${p.precioTxt}</p>`;
 
-                if (p.descuento > 0) {
-                    badgeDescuento = `<div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg z-10">${p.descuento}% OFF</div>`;
-                    HTMLPrecio = `
-                        <div class="flex flex-col mb-3">
-                            <span class="text-gray-400 line-through text-[10px] font-bold">${p.precioTxt}</span>
-                            <span class="text-red-600 font-black text-xl leading-tight">${precioMostrado}</span>
-                        </div>`;
-                } else {
-                    HTMLPrecio = `<p class="text-blue-600 font-black text-lg mb-3">${p.precioTxt}</p>`;
-                }
-
+                const badge = p.descuento > 0 ? `<div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg z-10">${p.descuento}% OFF</div>` : "";
                 const urlWA = `https://wa.me/${MI_TELEFONO}?text=${encodeURIComponent("Hola Computec, me interesa: " + p.nombre + " (Precio: " + precioMostrado + ")")}`;
 
                 contenedor.innerHTML += `
                     <div class="card-container bg-white rounded-3xl shadow-sm p-3 flex flex-col border border-gray-50 relative">
-                        ${badgeDescuento}
+                        ${badge}
                         <div class="relative w-full aspect-square bg-white overflow-hidden rounded-2xl mb-3 cursor-pointer" 
-                             onclick="abrirZoom('${rutaReal}', '${p.nombre}', '${p.descripcion.replace(/'/g, "\\'")}')">
-                            <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'"
-                                 class="img-card absolute inset-0 w-full h-full object-contain p-2">
+                             onclick="abrirZoom('${rutaReal}', '${p.nombre.replace(/'/g, "\\'")}', '${p.descripcion.replace(/'/g, "\\'").replace(/\n/g, "<br>")}')">
+                            <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'" class="img-card absolute inset-0 w-full h-full object-contain p-2">
                         </div>
                         <div class="mt-auto px-1">
-                            <h3 class="text-[10px] md:text-[11px] font-bold text-gray-700 leading-tight mb-2 min-h-[3rem]">${p.nombre}</h3>
+                            <h3 class="text-[10px] font-bold text-gray-700 leading-tight mb-2 min-h-[3rem]">${p.nombre}</h3>
                             ${HTMLPrecio}
-                            <a href="${urlWA}" target="_blank" class="block w-full bg-green-500 text-white text-center py-3 rounded-xl text-[9px] font-black active:scale-95 transition-all shadow-md uppercase">PEDIR POR WHATSAPP</a>
+                            <a href="${urlWA}" target="_blank" class="block w-full bg-green-500 text-white text-center py-3 rounded-xl text-[9px] font-black shadow-md uppercase">PEDIR POR WHATSAPP</a>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
         }
 
-        function toggleMenu() {
-            document.getElementById('menu-ordenar').classList.toggle('active');
-        }
+        function toggleMenu() { document.getElementById('menu-ordenar').classList.toggle('active'); }
 
         function ordenarProductos(criterio) {
-            let listaOrdenada = [...productosFiltrados];
-            if (criterio === 'menor') {
-                listaOrdenada.sort((a, b) => a.precioFinal - b.precioFinal);
-            } else if (criterio === 'mayor') {
-                listaOrdenada.sort((a, b) => b.precioFinal - a.precioFinal);
-            } else {
-                listaOrdenada = [...productosFiltrados];
-            }
-            mostrarProductos(listaOrdenada);
+            if (criterio === 'menor') productosFiltrados.sort((a, b) => a.precioFinal - b.precioFinal);
+            else if (criterio === 'mayor') productosFiltrados.sort((a, b) => b.precioFinal - a.precioFinal);
+            mostrarProductos(productosFiltrados);
             document.getElementById('menu-ordenar').classList.remove('active');
-        }
-
-        window.onclick = function(event) {
-            if (!event.target.closest('.relative')) {
-                document.getElementById('menu-ordenar').classList.remove('active');
-            }
         }
 
         function abrirZoom(url, nombre, descripcion) {
             document.getElementById('img-zoom').src = url;
             document.getElementById('txt-zoom').innerText = nombre;
-            document.getElementById('desc-zoom').innerText = descripcion;
-            document.getElementById('scroll-area-detalles').scrollTop = 0;
+            document.getElementById('desc-zoom').innerHTML = descripcion;
             document.getElementById('modal-zoom').classList.add('active');
             document.body.classList.add('modal-open');
         }
@@ -232,9 +207,8 @@
         }
 
         document.getElementById('buscador').addEventListener('input', (e) => {
-            const busqueda = e.target.value.toLowerCase();
-            productosFiltrados = productosData.filter(p => p.nombre.toLowerCase().includes(busqueda));
-            mostrarProductos(productosFiltrados);
+            const b = e.target.value.toLowerCase();
+            mostrarProductos(productosData.filter(p => p.nombre.toLowerCase().includes(b)));
         });
 
         cargarCatalogo();
