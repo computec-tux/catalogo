@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #modal-zoom { display: none; }
+        #modal-zoom.active { display: flex; }
+        .img-card { transition: transform 0.3s ease; }
+        .card-container:active .img-card { transform: scale(1.05); }
+        body.modal-open { overflow: hidden; }
+        
+        #menu-ordenar {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 110%;
+            background: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            z-index: 40;
+            width: 180px;
+            overflow: hidden;
+            border: 1px solid #f3f4f6;
+        }
+        #menu-ordenar.active { display: block; }
+        .opcion-orden {
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 1px solid #f9fafb;
+            cursor: pointer;
+        }
+        .opcion-orden:last-child { border-bottom: none; }
+        .opcion-orden:active { background-color: #f3f4f6; }
+
+        /* Mejora para el área de texto con scroll en móviles */
+        @media (max-width: 767px) {
+            #scroll-area-detalles {
+                max-height: 250px; /* Altura máxima del texto antes del scroll */
+                overflow-y: auto;  /* Permite scroll vertical */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-10 font-sans">
+
+    <div id="modal-zoom" class="fixed inset-0 bg-black/95 z-50 flex flex-col md:flex-row items-center justify-center p-4" onclick="cerrarZoom()">
+        <div class="absolute top-4 right-4 text-white text-sm font-bold bg-white/10 px-4 py-2 rounded-full border border-white/20 z-50">CERRAR</div>
+        
+        <div class="flex flex-col md:flex-row bg-white rounded-3xl overflow-hidden max-w-4xl w-full max-h-[90vh] shadow-2xl" onclick="event.stopPropagation()">
+            <div class="md:w-3/5 bg-white flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-100">
+                <img id="img-zoom" src="" class="max-w-full max-h-[35vh] md:max-h-[70vh] object-contain">
+            </div>
+            
+            <div class="md:w-2/5 flex flex-col justify-center bg-gray-50">
+                <div id="scroll-area-detalles" class="p-8">
+                    <p class="text-blue-500 font-bold text-[10px] uppercase tracking-widest mb-2">Detalle del Producto</p>
+                    <h2 id="txt-zoom" class="text-xl md:text-2xl font-black text-gray-800 leading-tight mb-4"></h2>
+                    <div class="h-1 w-12 bg-blue-500 mb-6"></div>
+                    <p class="text-gray-600 text-sm leading-relaxed mb-6">
+                        Este producto ha sido seleccionado cuidadosamente bajo los estándares de calidad de <strong>Computec</strong>. 
+                        Garantizamos originalidad y un estado impecable para tu total satisfacción.
+                        Si tienes alguna duda específica sobre el artículo, no dudes en contactarnos antes de realizar tu pedido.
+                    </p>
+                    <p class="text-green-600 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                        <span>📸</span> Foto Real del Producto
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-white shadow-sm p-6 mb-4 text-center">
+        <h1 class="text-3xl font-black text-gray-800 italic">Computec</h1>
+        <p class="text-blue-500 font-bold uppercase text-[10px] tracking-[0.2em]">Bienvenido</p>
+    </header>
+
+    <section class="max-w-md mx-auto px-4 mb-4">
+        <div class="flex gap-2 items-center">
+            <div class="relative flex-1">
+                <input type="text" id="buscador" placeholder="🔍 Buscar..." 
+                    class="w-full p-3 rounded-xl border-none shadow-md focus:ring-2 focus:ring-blue-400 outline-none text-sm">
+            </div>
+            
+            <div class="relative">
+                <button onclick="toggleMenu()" class="bg-white p-3 rounded-xl shadow-md flex items-center gap-2 text-sm font-bold text-gray-700 border border-gray-50">
+                    <span>Ordenar</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                
+                <div id="menu-ordenar">
+                    <div class="opcion-orden" onclick="ordenarProductos('defecto')">Todos</div>
+                    <div class="opcion-orden" onclick="ordenarProductos('menor')">Precio: Menor a Mayor</div>
+                    <div class="opcion-orden" onclick="ordenarProductos('mayor')">Precio: Mayor a Menor</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="max-w-md mx-auto px-4">
+        <div id="contenedor-productos" class="grid grid-cols-2 gap-4">
+            <div class="col-span-2 text-center py-20">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mb-4"></div>
+                <p class="text-gray-500 font-medium">Sincronizando...</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const urlCSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2Iu4O6hoqwZgma4xxBTi_9Nem_u9bZogcQSTgMXbChgay-wJN473fex0rs_q91Z2_yiURQjKeYkYZ/pub?output=csv";
+        const MI_TELEFONO = "529612577561";
+        let productosData = [];
+        let productosFiltrados = [];
+
+        async function cargarCatalogo() {
+            try {
+                const respuesta = await fetch(urlCSV + "&v=" + Date.now());
+                const texto = await respuesta.text();
+                const filas = texto.split(/\r?\n/).slice(1);
+                
+                productosData = filas.map(fila => {
+                    const columnas = fila.split(/,(?=(?:(?:[^\" ]*\"){2})*[^\" ]*$)/);
+                    if (columnas.length >= 5) {
+                        const precioOriginal = columnas[1]?.trim().replace(/\"/g, "") || "0";
+                        const descuentoStr = columnas[5]?.trim().replace(/\"/g, "").replace("%", "") || "0";
+                        const pNum = parseFloat(precioOriginal.replace(/[^0-9.]/g, '')) || 0;
+                        const dNum = parseFloat(descuentoStr) || 0;
+                        const precioFinalNum = dNum > 0 ? pNum - (pNum * (dNum / 100)) : pNum;
+
+                        return {
+                            nombre: columnas[0]?.trim().replace(/\"/g, "") || "",
+                            precioTxt: precioOriginal,
+                            precioFinal: precioFinalNum,
+                            imgBlanca: columnas[2]?.trim().replace(/\"/g, "") || "", 
+                            imgReal: columnas[3]?.trim().replace(/\"/g, "") || "",   
+                            estado: columnas[4]?.trim().replace(/\"/g, "").toLowerCase() || "",
+                            descuento: dNum
+                        };
+                    }
+                    return null;
+                }).filter(p => p && (p.estado === "disponible" || p.estado === "d"));
+                
+                productosFiltrados = [...productosData];
+                mostrarProductos(productosFiltrados);
+            } catch (error) { 
+                document.getElementById('contenedor-productos').innerHTML = "<p class='text-center col-span-2'>Error al cargar.</p>";
+            }
+        }
+
+        function mostrarProductos(lista) {
+            const contenedor = document.getElementById('contenedor-productos');
+            contenedor.innerHTML = "";
+
+            lista.forEach(p => {
+                const cache = "?v=" + Date.now();
+                const rutaBlanca = "./" + p.imgBlanca + cache;
+                const rutaReal = "./" + p.imgReal + cache;
+                let HTMLPrecio = "";
+                let badgeDescuento = "";
+                const precioMostrado = `$${p.precioFinal.toFixed(2)}`;
+
+                if (p.descuento > 0) {
+                    badgeDescuento = `<div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg z-10">${p.descuento}% OFF</div>`;
+                    HTMLPrecio = `
+                        <div class="flex flex-col mb-3">
+                            <span class="text-gray-400 line-through text-[10px] font-bold">${p.precioTxt}</span>
+                            <span class="text-red-600 font-black text-xl leading-tight">${precioMostrado}</span>
+                        </div>`;
+                } else {
+                    HTMLPrecio = `<p class="text-blue-600 font-black text-lg mb-3">${p.precioTxt}</p>`;
+                }
+
+                const urlWA = `https://wa.me/${MI_TELEFONO}?text=${encodeURIComponent("Hola Computec, me interesa: " + p.nombre + " (Precio: " + precioMostrado + ")")}`;
+
+                contenedor.innerHTML += `
+                    <div class="card-container bg-white rounded-3xl shadow-sm p-3 flex flex-col border border-gray-50 relative">
+                        ${badgeDescuento}
+                        <div class="relative w-full aspect-square bg-white overflow-hidden rounded-2xl mb-3 cursor-pointer" 
+                             onclick="abrirZoom('${rutaReal}', '${p.nombre}')">
+                            <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'"
+                                 class="img-card absolute inset-0 w-full h-full object-contain p-2">
+                        </div>
+                        <div class="mt-auto px-1">
+                            <h3 class="text-[10px] md:text-[11px] font-bold text-gray-700 leading-tight mb-2 min-h-[3rem]">${p.nombre}</h3>
+                            ${HTMLPrecio}
+                            <a href="${urlWA}" target="_blank" class="block w-full bg-green-500 text-white text-center py-3 rounded-xl text-[9px] font-black active:scale-95 transition-all shadow-md uppercase">PEDIR POR WHATSAPP</a>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function toggleMenu() {
+            document.getElementById('menu-ordenar').classList.toggle('active');
+        }
+
+        function ordenarProductos(criterio) {
+            let listaOrdenada = [...productosFiltrados];
+            if (criterio === 'menor') {
+                listaOrdenada.sort((a, b) => a.precioFinal - b.precioFinal);
+            } else if (criterio === 'mayor') {
+                listaOrdenada.sort((a, b) => b.precioFinal - a.precioFinal);
+            } else {
+                listaOrdenada = [...productosFiltrados];
+            }
+            mostrarProductos(listaOrdenada);
+            document.getElementById('menu-ordenar').classList.remove('active');
+        }
+
+        window.onclick = function(event) {
+            if (!event.target.closest('.relative')) {
+                document.getElementById('menu-ordenar').classList.remove('active');
+            }
+        }
+
+        function abrirZoom(url, nombre) {
+            document.getElementById('img-zoom').src = url;
+            document.getElementById('txt-zoom').innerText = nombre;
+            // Aseguramos que el scroll esté arriba al abrir
+            document.getElementById('scroll-area-detalles').scrollTop = 0;
+            document.getElementById('modal-zoom').classList.add('active');
+            document.body.classList.add('modal-open');
+        }
+
+        function cerrarZoom() {
+            document.getElementById('modal-zoom').classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        document.getElementById('buscador').addEventListener('input', (e) => {
+            const busqueda = e.target.value.toLowerCase();
+            productosFiltrados = productosData.filter(p => p.nombre.toLowerCase().includes(busqueda));
+            mostrarProductos(productosFiltrados);
+        });
+
+        cargarCatalogo();
+    </script>
+</body>
+</html>
