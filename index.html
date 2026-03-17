@@ -114,32 +114,46 @@
         let productosData = [];
         let productosFiltrados = [];
 
+        function parsearLineaCSV(text) {
+            const result = [];
+            let cell = '';
+            let inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) {
+                    result.push(cell.trim());
+                    cell = '';
+                } else cell += char;
+            }
+            result.push(cell.trim());
+            return result;
+        }
+
         async function cargarCatalogo() {
             try {
                 const respuesta = await fetch(urlCSV + "&v=" + Date.now());
                 const texto = await respuesta.text();
-                const filas = texto.split(/\r?\n/).slice(1);
+                const filas = texto.split(/\r?\n/).filter(f => f.trim() !== "").slice(1);
                 
                 productosData = filas.map(fila => {
-                    // Split robusto para manejar comas dentro de las descripciones
-                    const columnas = fila.split(/,(?=(?:(?:[^" ]*"){2})*[^" ]*$)/);
+                    const columnas = parsearLineaCSV(fila);
                     if (columnas.length >= 5) {
-                        const precioOriginal = columnas[1]?.trim().replace(/"/g, "") || "0";
-                        const descuentoStr = columnas[5]?.trim().replace(/"/g, "").replace("%", "") || "0";
+                        const precioOriginal = columnas[1] || "0";
+                        const descuentoStr = columnas[5]?.replace("%", "") || "0";
                         const pNum = parseFloat(precioOriginal.replace(/[^0-9.]/g, '')) || 0;
                         const dNum = parseFloat(descuentoStr) || 0;
                         const precioFinalNum = dNum > 0 ? pNum - (pNum * (dNum / 100)) : pNum;
 
                         return {
-                            nombre: columnas[0]?.trim().replace(/"/g, "") || "",
+                            nombre: columnas[0] || "",
                             precioTxt: precioOriginal,
                             precioFinal: precioFinalNum,
-                            imgBlanca: columnas[2]?.trim().replace(/"/g, "") || "", 
-                            imgReal: columnas[3]?.trim().replace(/"/g, "") || "",   
-                            estado: columnas[4]?.trim().replace(/"/g, "").toLowerCase() || "",
+                            imgBlanca: columnas[2] || "", 
+                            imgReal: columnas[3] || "",   
+                            estado: columnas[4]?.toLowerCase() || "",
                             descuento: dNum,
-                            // Leemos la columna G (índice 6)
-                            descripcion: columnas[6]?.trim().replace(/"/g, "") || "Este producto ha sido seleccionado cuidadosamente bajo los estándares de Computec."
+                            descripcion: columnas[6] || "Calidad Computec garantizada."
                         };
                     }
                     return null;
@@ -148,81 +162,58 @@
                 productosFiltrados = [...productosData];
                 mostrarProductos(productosFiltrados);
             } catch (error) { 
-                document.getElementById('contenedor-productos').innerHTML = "<p class='text-center col-span-2'>Error al cargar.</p>";
+                document.getElementById('contenedor-productos').innerHTML = "<p class='text-center col-span-2'>Error de conexión.</p>";
             }
         }
 
         function mostrarProductos(lista) {
             const contenedor = document.getElementById('contenedor-productos');
             contenedor.innerHTML = "";
-
+            if (lista.length === 0) {
+                contenedor.innerHTML = "<p class='text-center col-span-2 py-10'>No hay productos disponibles.</p>";
+                return;
+            }
             lista.forEach(p => {
                 const cache = "?v=" + Date.now();
                 const rutaBlanca = "./" + p.imgBlanca + cache;
                 const rutaReal = "./" + p.imgReal + cache;
-                let HTMLPrecio = "";
-                let badgeDescuento = "";
                 const precioMostrado = `$${p.precioFinal.toFixed(2)}`;
-
-                if (p.descuento > 0) {
-                    badgeDescuento = `<div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg z-10">${p.descuento}% OFF</div>`;
-                    HTMLPrecio = `
-                        <div class="flex flex-col mb-3">
-                            <span class="text-gray-400 line-through text-[10px] font-bold">${p.precioTxt}</span>
-                            <span class="text-red-600 font-black text-xl leading-tight">${precioMostrado}</span>
-                        </div>`;
-                } else {
-                    HTMLPrecio = `<p class="text-blue-600 font-black text-lg mb-3">${p.precioTxt}</p>`;
-                }
+                let HTMLPrecio = p.descuento > 0 ? 
+                    `<div class="flex flex-col mb-3"><span class="text-gray-400 line-through text-[10px] font-bold">${p.precioTxt}</span><span class="text-red-600 font-black text-xl leading-tight">${precioMostrado}</span></div>` : 
+                    `<p class="text-blue-600 font-black text-lg mb-3">${p.precioTxt}</p>`;
 
                 const urlWA = `https://wa.me/${MI_TELEFONO}?text=${encodeURIComponent("Hola Computec, me interesa: " + p.nombre + " (Precio: " + precioMostrado + ")")}`;
-
                 contenedor.innerHTML += `
                     <div class="card-container bg-white rounded-3xl shadow-sm p-3 flex flex-col border border-gray-50 relative">
-                        ${badgeDescuento}
+                        ${p.descuento > 0 ? `<div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg z-10">${p.descuento}% OFF</div>` : ''}
                         <div class="relative w-full aspect-square bg-white overflow-hidden rounded-2xl mb-3 cursor-pointer" 
-                             onclick="abrirZoom('${rutaReal}', '${p.nombre.replace(/'/g, "\\'")}', '${p.descripcion.replace(/'/g, "\\'").replace(/\n/g, "<br>")}')">
-                            <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'"
-                                 class="img-card absolute inset-0 w-full h-full object-contain p-2">
+                             onclick="abrirZoom('${rutaReal}', '${p.nombre.replace(/'/g, "\\'")}', '${p.descripcion.replace(/'/g, "\\'").replace(/\n/g, " ")}')">
+                            <img src="${rutaBlanca}" onerror="this.src='https://via.placeholder.com/200?text=Computec'" class="img-card absolute inset-0 w-full h-full object-contain p-2">
                         </div>
                         <div class="mt-auto px-1">
                             <h3 class="text-[10px] md:text-[11px] font-bold text-gray-700 leading-tight mb-2 min-h-[3rem]">${p.nombre}</h3>
                             ${HTMLPrecio}
                             <a href="${urlWA}" target="_blank" class="block w-full bg-green-500 text-white text-center py-3 rounded-xl text-[9px] font-black active:scale-95 transition-all shadow-md uppercase">PEDIR POR WHATSAPP</a>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
         }
 
-        function toggleMenu() {
-            document.getElementById('menu-ordenar').classList.toggle('active');
-        }
+        function toggleMenu() { document.getElementById('menu-ordenar').classList.toggle('active'); }
 
         function ordenarProductos(criterio) {
-            let listaOrdenada = [...productosFiltrados];
-            if (criterio === 'menor') {
-                listaOrdenada.sort((a, b) => a.precioFinal - b.precioFinal);
-            } else if (criterio === 'mayor') {
-                listaOrdenada.sort((a, b) => b.precioFinal - a.precioFinal);
-            } else {
-                listaOrdenada = [...productosFiltrados];
-            }
-            mostrarProductos(listaOrdenada);
+            if (criterio === 'menor') productosFiltrados.sort((a, b) => a.precioFinal - b.precioFinal);
+            else if (criterio === 'mayor') productosFiltrados.sort((a, b) => b.precioFinal - a.precioFinal);
+            mostrarProductos(productosFiltrados);
             document.getElementById('menu-ordenar').classList.remove('active');
         }
 
-        window.onclick = function(event) {
-            if (!event.target.closest('.relative')) {
-                document.getElementById('menu-ordenar').classList.remove('active');
-            }
-        }
+        window.onclick = (e) => { if (!e.target.closest('.relative')) document.getElementById('menu-ordenar').classList.remove('active'); }
 
         function abrirZoom(url, nombre, descripcion) {
             document.getElementById('img-zoom').src = url;
             document.getElementById('txt-zoom').innerText = nombre;
-            document.getElementById('desc-zoom').innerHTML = descripcion;
-            document.getElementById('scroll-area-detalles').scrollTop = 0;
+            document.getElementById('desc-zoom').innerText = descripcion;
             document.getElementById('modal-zoom').classList.add('active');
             document.body.classList.add('modal-open');
         }
@@ -233,9 +224,8 @@
         }
 
         document.getElementById('buscador').addEventListener('input', (e) => {
-            const busqueda = e.target.value.toLowerCase();
-            productosFiltrados = productosData.filter(p => p.nombre.toLowerCase().includes(busqueda));
-            mostrarProductos(productosFiltrados);
+            const b = e.target.value.toLowerCase();
+            mostrarProductos(productosData.filter(p => p.nombre.toLowerCase().includes(b)));
         });
 
         cargarCatalogo();
